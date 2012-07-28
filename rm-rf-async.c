@@ -32,6 +32,8 @@ typedef struct {
   GSimpleAsyncResult *result;
 } AsyncRmContext;
 
+static guint files_deleted = 0;
+
 static void fatal_gerror (GError *error) G_GNUC_NORETURN;
 
 static void
@@ -64,6 +66,8 @@ on_end_directory_deleted (GObject         *file,
   if (!g_file_delete_finish ((GFile*)file, result, &local_error))
     fatal_gerror (local_error);
 
+  files_deleted++;
+
   g_simple_async_result_complete (data->result);
   g_object_unref (data->result);
   g_object_unref (data->file);
@@ -88,6 +92,8 @@ on_file_deleted (GObject        *object,
 
   if (!g_file_delete_finish ((GFile*)object, result, &local_error))
     fatal_gerror (local_error);
+
+  files_deleted++;
 
   data->num_files_pending--;
   check_no_children (data);
@@ -221,6 +227,13 @@ on_rm_finished (GObject          *file,
   g_main_loop_quit (loop);
 }
 
+static gboolean
+print_progress (gpointer user_data)
+{
+  g_print ("%u files deleted\n", files_deleted);
+  return FALSE;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -238,7 +251,11 @@ main (int argc, char **argv)
 
   rm_rf_async (path, G_PRIORITY_DEFAULT, NULL, on_rm_finished, loop);
 
+  g_timeout_add_seconds (1, print_progress, NULL);
+
   g_main_loop_run (loop);
+
+  print_progress (NULL);
 
   return 0;
 }
